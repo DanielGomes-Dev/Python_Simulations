@@ -11,25 +11,14 @@ SCREEN_WIDTH = 1600
 SCREEN_HEIGHT = 900
 SCREEN_TITLE = "Bolas com Paralelismo por Quadrantes e Impulso"
 
-BALL_RADIUS = 10
+BALL_RADIUS = 15
 BALL_COUNT = 300
-BALL_LAUNCH_INTERVAL = 1 / 1000
+BALL_LAUNCH_INTERVAL = 1 / 100
 FRICTION = 1
 
 NUM_QUADS_X = 4
 NUM_QUADS_Y = 2
 NUM_QUADS = NUM_QUADS_X * NUM_QUADS_Y
-
-QUAD_COLORS = [
-    arcade.color.ALICE_BLUE,
-    arcade.color.BEIGE,
-    arcade.color.LAVENDER,
-    arcade.color.MISTY_ROSE,
-    arcade.color.LIGHT_CYAN,
-    arcade.color.LIGHT_GOLDENROD_YELLOW,
-    arcade.color.LIGHT_PINK,
-    arcade.color.LIGHT_YELLOW,
-]
 
 BALL_COLORS = [
     arcade.color.BLUE_BELL, arcade.color.AUBURN, arcade.color.BANANA_MANIA,
@@ -145,7 +134,6 @@ def update_and_collide(balls, all_balls, game):
                                 all_balls.append(new_ball)
                                 b1.last_spawn_time = now
                                 b2.last_spawn_time = now
-                                game.last_winner_color = b1.color  # Marca última bola criada
 
     with lock:
         for index in sorted(balls_to_remove, reverse=True):
@@ -164,13 +152,12 @@ class MyGame(arcade.Window):
         self.total_balls_created = 0
         self.time_since_last_launch = 0.0
         self.executor = ThreadPoolExecutor(max_workers=NUM_QUADS)
-        self.last_winner_color = None  # Guarda a última cor vencedora
+        self.last_winner_color = None
 
     def setup(self):
         self.ball_list.clear()
         self.total_balls_created = 0
         self.time_since_last_launch = 0.0
-        self.last_winner_color = None
 
     def create_new_ball(self):
         with lock:
@@ -205,23 +192,48 @@ class MyGame(arcade.Window):
         y_index = min(y_index, NUM_QUADS_Y - 1)
         return y_index * NUM_QUADS_X + x_index
 
+    def draw_dashed_line(self, x1, y1, x2, y2, dash_length=10, space_length=10, color=arcade.color.BLACK, line_width=2):
+        # Desenha linha tracejada entre (x1, y1) e (x2, y2)
+        # Funciona para linhas verticais e horizontais
+        if x1 == x2:  # linha vertical
+            y = y1
+            while y < y2:
+                end_y = min(y + dash_length, y2)
+                arcade.draw_line(x1, y, x2, end_y, color, line_width)
+                y += dash_length + space_length
+        elif y1 == y2:  # linha horizontal
+            x = x1
+            while x < x2:
+                end_x = min(x + dash_length, x2)
+                arcade.draw_line(x, y1, end_x, y2, color, line_width)
+                x += dash_length + space_length
+
     def on_draw(self):
         self.clear()
         quad_w = SCREEN_WIDTH / NUM_QUADS_X
         quad_h = SCREEN_HEIGHT / NUM_QUADS_Y
 
-        for i in range(NUM_QUADS):
-            col = i % NUM_QUADS_X
-            row = i // NUM_QUADS_X
-            left = col * quad_w
-            bottom = row * quad_h
-            arcade.draw_lrbt_rectangle_filled(left, left + quad_w, bottom, bottom + quad_h, QUAD_COLORS[i])
+        # Fundo branco para todo o fundo (quadrantes)
+        arcade.draw_lrbt_rectangle_filled(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT, arcade.color.WHITE)
 
+        # Desenhar linhas tracejadas verticais (divisórias dos quadrantes)
+        for i in range(1, NUM_QUADS_X):
+            x = i * quad_w
+            self.draw_dashed_line(x, 0, x, SCREEN_HEIGHT)
+
+        # Desenhar linhas tracejadas horizontais (divisórias dos quadrantes)
+        for i in range(1, NUM_QUADS_Y):
+            y = i * quad_h
+            self.draw_dashed_line(0, y, SCREEN_WIDTH, y)
+
+        # Desenhar as bolas
         for ball in self.ball_list:
             ball.draw()
 
+        # Texto bolas criadas
         arcade.draw_text(f"Bolas criadas: {self.total_balls_created}", 10, SCREEN_HEIGHT - 30, arcade.color.BLACK, 18)
 
+        # Contagem de bolas por cor (no canto inferior esquerdo)
         counts = {}
         for ball in self.ball_list:
             counts[ball.color] = counts.get(ball.color, 0) + 1
@@ -233,14 +245,26 @@ class MyGame(arcade.Window):
             arcade.draw_text(f"{count}", x, y, color, 16)
             x += 60
 
+        # Contador total no canto inferior direito
         arcade.draw_text(f"Total: {len(self.ball_list)}", SCREEN_WIDTH - 130, 10, arcade.color.BLACK, 18)
 
-        # Mostra a última bola criada em fusão no topo da tela
-        if self.last_winner_color:
+        # Última cor vencedora no topo central, texto em preto
+        if self.last_winner_color is not None:
+            try:
+                color_index = BALL_COLORS.index(self.last_winner_color)
+                nomes_cores_pt = [
+                    "Azul Claro", "Auburn", "Amarelo Claro",
+                    "Cerúleo", "Salmão Escuro", "Lima Elétrica",
+                    "Vermelho Tijolo", "Dourado", "Rosa Forte", "Verde Lima",
+                ]
+                color_name = nomes_cores_pt[color_index]
+            except ValueError:
+                color_name = "Desconhecida"
+
             arcade.draw_text(
-                "Última bola criada (cor vencedora)",
+                f"Última cor vencedora: {color_name}",
                 SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 40,
-                self.last_winner_color, 20
+                arcade.color.BLACK, 20
             )
 
     def on_update(self, delta_time: float):
@@ -265,7 +289,8 @@ class MyGame(arcade.Window):
             quads[current_quad].append(ball)
 
         unique_colors = set(ball.color for ball in self.ball_list)
-        if len(unique_colors) <= 1 and self.total_balls_created >= 10:
+        if len(unique_colors) == 1 and self.total_balls_created >= 10:
+            self.last_winner_color = next(iter(unique_colors))
             print("Reiniciando o jogo: apenas uma cor restante.")
             self.setup()
             return
