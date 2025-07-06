@@ -167,7 +167,7 @@ class MyGame(arcade.Window):
         self.last_winner_color = None
 
         # Carrega a música uma vez e toca em loop
-        self.music = arcade.Sound("lofi1.mp3")
+        self.music = arcade.Sound("lofi12.mp3")
         self.music_player = self.music.play(loop=True)
 
     def setup(self):
