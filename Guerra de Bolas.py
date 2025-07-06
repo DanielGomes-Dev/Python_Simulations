@@ -20,6 +20,18 @@ NUM_QUADS_X = 4
 NUM_QUADS_Y = 2
 NUM_QUADS = NUM_QUADS_X * NUM_QUADS_Y
 
+# Cores dos quadrantes suavizadas para melhor contraste com as bolinhas
+QUAD_COLORS = [
+    (255, 255, 255),  # Branco para todos os quadrantes (fundo)
+    (255, 255, 255),
+    (255, 255, 255),
+    (255, 255, 255),
+    (255, 255, 255),
+    (255, 255, 255),
+    (255, 255, 255),
+    (255, 255, 255),
+]
+
 BALL_COLORS = [
     arcade.color.BLUE_BELL, arcade.color.AUBURN, arcade.color.BANANA_MANIA,
     arcade.color.CERULEAN, arcade.color.DARK_SALMON, arcade.color.ELECTRIC_LIME,
@@ -154,10 +166,15 @@ class MyGame(arcade.Window):
         self.executor = ThreadPoolExecutor(max_workers=NUM_QUADS)
         self.last_winner_color = None
 
+        # Carrega a música uma vez e toca em loop
+        self.music = arcade.Sound("lofi.mp3")
+        self.music_player = self.music.play(loop=True)
+
     def setup(self):
         self.ball_list.clear()
         self.total_balls_created = 0
         self.time_since_last_launch = 0.0
+        # Não toca a música aqui para não reiniciar
 
     def create_new_ball(self):
         with lock:
@@ -192,48 +209,48 @@ class MyGame(arcade.Window):
         y_index = min(y_index, NUM_QUADS_Y - 1)
         return y_index * NUM_QUADS_X + x_index
 
-    def draw_dashed_line(self, x1, y1, x2, y2, dash_length=10, space_length=10, color=arcade.color.BLACK, line_width=2):
-        # Desenha linha tracejada entre (x1, y1) e (x2, y2)
-        # Funciona para linhas verticais e horizontais
-        if x1 == x2:  # linha vertical
-            y = y1
-            while y < y2:
-                end_y = min(y + dash_length, y2)
-                arcade.draw_line(x1, y, x2, end_y, color, line_width)
-                y += dash_length + space_length
-        elif y1 == y2:  # linha horizontal
-            x = x1
-            while x < x2:
-                end_x = min(x + dash_length, x2)
-                arcade.draw_line(x, y1, end_x, y2, color, line_width)
-                x += dash_length + space_length
-
     def on_draw(self):
         self.clear()
         quad_w = SCREEN_WIDTH / NUM_QUADS_X
         quad_h = SCREEN_HEIGHT / NUM_QUADS_Y
 
-        # Fundo branco para todo o fundo (quadrantes)
-        arcade.draw_lrbt_rectangle_filled(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT, arcade.color.WHITE)
+        # Quadrantes brancos (fundo)
+        for i in range(NUM_QUADS):
+            col = i % NUM_QUADS_X
+            row = i // NUM_QUADS_X
+            left = col * quad_w
+            bottom = row * quad_h
+            arcade.draw_lrbt_rectangle_filled(left, left + quad_w, bottom, bottom + quad_h, arcade.color.WHITE)
 
-        # Desenhar linhas tracejadas verticais (divisórias dos quadrantes)
+        # Desenha as linhas tracejadas separando os quadrantes
+        dash_length = 10
+        gap_length = 5
+
+        # Linhas verticais tracejadas
         for i in range(1, NUM_QUADS_X):
             x = i * quad_w
-            self.draw_dashed_line(x, 0, x, SCREEN_HEIGHT)
+            y_start = 0
+            y_end = SCREEN_HEIGHT
+            y = y_start
+            while y < y_end:
+                arcade.draw_line(x, y, x, min(y + dash_length, y_end), arcade.color.GRAY)
+                y += dash_length + gap_length
 
-        # Desenhar linhas tracejadas horizontais (divisórias dos quadrantes)
+        # Linhas horizontais tracejadas
         for i in range(1, NUM_QUADS_Y):
             y = i * quad_h
-            self.draw_dashed_line(0, y, SCREEN_WIDTH, y)
+            x_start = 0
+            x_end = SCREEN_WIDTH
+            x = x_start
+            while x < x_end:
+                arcade.draw_line(x, y, min(x + dash_length, x_end), y, arcade.color.GRAY)
+                x += dash_length + gap_length
 
-        # Desenhar as bolas
         for ball in self.ball_list:
             ball.draw()
 
-        # Texto bolas criadas
         arcade.draw_text(f"Bolas criadas: {self.total_balls_created}", 10, SCREEN_HEIGHT - 30, arcade.color.BLACK, 18)
 
-        # Contagem de bolas por cor (no canto inferior esquerdo)
         counts = {}
         for ball in self.ball_list:
             counts[ball.color] = counts.get(ball.color, 0) + 1
@@ -245,10 +262,8 @@ class MyGame(arcade.Window):
             arcade.draw_text(f"{count}", x, y, color, 16)
             x += 60
 
-        # Contador total no canto inferior direito
         arcade.draw_text(f"Total: {len(self.ball_list)}", SCREEN_WIDTH - 130, 10, arcade.color.BLACK, 18)
 
-        # Última cor vencedora no topo central, texto em preto
         if self.last_winner_color is not None:
             try:
                 color_index = BALL_COLORS.index(self.last_winner_color)
@@ -302,6 +317,11 @@ class MyGame(arcade.Window):
         else:
             for quad in quads:
                 update_and_collide(quad, self.ball_list, self)
+
+    def on_close(self):
+        if self.music_player:
+            self.music_player.stop()
+        super().on_close()
 
 
 def main():
